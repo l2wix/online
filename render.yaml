@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: discord-bot
+    env: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+    healthCheckPath: /health
+    autoDeploy: true
+    buildCommand: ""
+    startCommand: "python discord_bot.py"

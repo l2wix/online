@@ -1,0 +1,13 @@
+# Discord Bot Dependencies
+discord.py>=2.3.0
+python-dotenv>=1.0.0
+
+# Additional dependencies for enhanced functionality
+aiohttp>=3.8.0
+asyncio-throttle>=1.0.0
+
+# Optional: For voice support (uncomment if needed)
+# PyNaCl>=1.5.0
+
+# Development and debugging
+colorama>=0.4.6
