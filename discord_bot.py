@@ -127,7 +127,7 @@ class OnlineMemberTracker(commands.Bot):
                                "💤 **0** members currently active\n\n" +
                                "🔮 *The digital realm awaits your return...*",
                     color=discord.Color.from_rgb(47, 49, 54),
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.now()
                 )
                 embed.add_field(
                     name="⏰ Auto-Updates",
@@ -187,7 +187,7 @@ class OnlineMemberTracker(commands.Bot):
                                f"📊 Activity Level: {progress_bar} **{online_percentage:.1f}%**\n\n" +
                                f"💬 *{self._get_activity_message(len(online_members))}*",
                     color=color,
-                    timestamp=datetime.utcnow()
+                    timestamp=datetime.now()
                 )
                 
                 # Enhanced status info with animations
@@ -461,6 +461,7 @@ class OnlineMemberTracker(commands.Bot):
         
         guild_id = after.guild.id
         logger.info(f"Status change detected for {after.display_name} in guild {guild_id}: {before.status} -> {after.status}")
+        logger.info(f"Member {after.display_name} roles: {[role.name for role in after.roles]}")
         
         # Note: No longer requiring notification channel since we use DMs
         
@@ -636,7 +637,7 @@ async def online_command(interaction: discord.Interaction):
                            "💤 **0** members currently active\n\n" +
                            "🔮 *Perfect time to be the first one to start the conversation!*",
                 color=discord.Color.from_rgb(47, 49, 54),
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now()
             )
             embed.add_field(
                 name="🎯 Quick Actions",
@@ -696,7 +697,7 @@ async def online_command(interaction: discord.Interaction):
                            f"📊 Activity Meter: {progress_bar} **{online_percentage:.1f}%**\n\n" +
                            f"💫 *{bot._get_activity_message(len(online_members))}*",
                 color=color,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now()
             )
             
             # Enhanced status info with spectacular animations
@@ -779,7 +780,7 @@ async def online_command(interaction: discord.Interaction):
             description="```css\n/* Unable to fetch online members right now */\n```\n" +
                        "🔧 *Please try again in a moment or contact an admin if this persists.*",
             color=discord.Color.red(),
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now()
         )
         await interaction.followup.send(embed=error_embed, ephemeral=True)
 
@@ -1088,7 +1089,7 @@ async def testnotify_command(interaction: discord.Interaction):
                        f"✅ **The notification system is working correctly!**\n" +
                        f"🔔 Members with the {target_role.name} role will trigger notifications when they go online/offline.",
             color=discord.Color.green(),
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now()
         )
 
         test_embed.set_footer(text="🏰 LIMITLESS • Test completed successfully")
@@ -1112,6 +1113,62 @@ async def testnotify_command(interaction: discord.Interaction):
             color=discord.Color.red()
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
+
+@bot.tree.command(name="testdm", description="Test the DM notification system - sends you a sample DM")
+async def testdm_command(interaction: discord.Interaction):
+    """Test DM notifications by sending a sample DM to the user"""
+    try:
+        await interaction.response.defer(ephemeral=True)
+        
+        # Create the same DM embed that would be sent for real notifications
+        embed = discord.Embed(
+            title="🟢 Someone's Online!",
+            description=f"**{interaction.user.display_name}** just came online in **{interaction.guild.name}**!",
+            color=0x00ff00,
+            timestamp=datetime.now()
+        )
+        embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        embed.add_field(
+            name="💬 Ready to Chat",
+            value="Perfect timing to start a conversation!",
+            inline=False
+        )
+        embed.set_footer(
+            text=f"From {interaction.guild.name} • This is a test DM",
+            icon_url=interaction.guild.icon.url if interaction.guild.icon else None
+        )
+        
+        # Try to send the DM
+        try:
+            await interaction.user.send(embed=embed)
+            
+            # Confirm in the channel
+            success_embed = discord.Embed(
+                title="✅ Test DM Sent!",
+                description="Check your DMs to see how the notification looks.\n\n" +
+                           "This is exactly what other users will receive when someone with the target role comes online.",
+                color=discord.Color.green()
+            )
+            await interaction.followup.send(embed=success_embed, ephemeral=True)
+            
+        except discord.Forbidden:
+            error_embed = discord.Embed(
+                title="❌ Cannot Send DM",
+                description="I couldn't send you a DM. Please check that:\n" +
+                           "• You have DMs enabled from server members\n" +
+                           "• You haven't blocked the bot",
+                color=discord.Color.red()
+            )
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+            
+    except Exception as e:
+        logger.error(f"Error in testdm command: {e}")
+        error_embed = discord.Embed(
+            title="❌ Error",
+            description="An error occurred while testing DM notifications.",
+            color=discord.Color.red()
+        )
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
 
 @bot.event
 async def on_command_error(ctx, error):
