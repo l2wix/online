@@ -259,6 +259,60 @@ class OnlineMemberTracker(commands.Bot):
         except Exception as e:
             logger.error(f"Error sending online summary: {e}")
     
+    async def send_dm_notifications(self, member: discord.Member, target_role: discord.Role):
+        """Send DM notifications to all users with the target role when someone comes online"""
+        try:
+            logger.info(f"Sending DM notifications for {member.display_name} coming online")
+            
+            # Get all members with the target role (excluding the member who just came online)
+            members_to_notify = [m for m in target_role.members if m != member and not m.bot]
+            
+            if not members_to_notify:
+                logger.info(f"No members to notify for {member.display_name} coming online")
+                return
+            
+            # Create the DM embed
+            embed = discord.Embed(
+                title="🟢 Someone's Online!",
+                description=f"**{member.display_name}** just came online in **{member.guild.name}**!",
+                color=0x00ff00,
+                timestamp=datetime.now()
+            )
+            embed.set_thumbnail(url=member.display_avatar.url)
+            embed.add_field(
+                name="💬 Ready to Chat",
+                value="Perfect timing to start a conversation!",
+                inline=False
+            )
+            embed.set_footer(
+                text=f"From {member.guild.name}",
+                icon_url=member.guild.icon.url if member.guild.icon else None
+            )
+            
+            # Send DMs to all members with the target role
+            successful_dms = 0
+            failed_dms = 0
+            
+            for notify_member in members_to_notify:
+                try:
+                    await notify_member.send(embed=embed)
+                    successful_dms += 1
+                    logger.info(f"✅ DM sent to {notify_member.display_name}")
+                except discord.Forbidden:
+                    failed_dms += 1
+                    logger.warning(f"❌ Cannot send DM to {notify_member.display_name} (DMs disabled)")
+                except discord.HTTPException as e:
+                    failed_dms += 1
+                    logger.error(f"❌ Failed to send DM to {notify_member.display_name}: {e}")
+                except Exception as e:
+                    failed_dms += 1
+                    logger.error(f"❌ Unexpected error sending DM to {notify_member.display_name}: {e}")
+            
+            logger.info(f"DM notification summary: {successful_dms} sent, {failed_dms} failed")
+            
+        except Exception as e:
+            logger.error(f"Error in send_dm_notifications: {e}")
+    
     def _get_activity_message(self, count: int) -> str:
         """Get dynamic activity message based on member count"""
         if count == 1:
@@ -408,10 +462,7 @@ class OnlineMemberTracker(commands.Bot):
         guild_id = after.guild.id
         logger.info(f"Status change detected for {after.display_name} in guild {guild_id}: {before.status} -> {after.status}")
         
-        # Check if we have a notification channel set for this guild
-        if guild_id not in self.notification_channels:
-            logger.info(f"No notification channel set for guild {guild_id}")
-            return
+        # Note: No longer requiring notification channel since we use DMs
         
         # Check if we have a target role set for this guild
         if guild_id not in self.target_roles:
@@ -437,9 +488,6 @@ class OnlineMemberTracker(commands.Bot):
         logger.info(f"Processing notification for {after.display_name}...")
         
         try:
-            channel = self.get_channel(self.notification_channels[guild_id])
-            if not channel:
-                return
             
             # Determine if member went online or offline
             was_online = (before.status != discord.Status.offline and 
@@ -448,97 +496,9 @@ class OnlineMemberTracker(commands.Bot):
                         after.status != discord.Status.invisible)
             
             if not was_online and is_online:
-                # Member came online - create beautiful engaging message
-                status_details = {
-                    discord.Status.online: {
-                        "emoji": "🟢",
-                        "color": 0x00ff00,
-                        "text": "online and ready to chat",
-                        "vibe": "energetic",
-                        "action": "joined the party"
-                    },
-                    discord.Status.idle: {
-                        "emoji": "🟡", 
-                        "color": 0xffa500,
-                        "text": "online but taking a break",
-                        "vibe": "relaxed",
-                        "action": "stepped in quietly"
-                    },
-                    discord.Status.dnd: {
-                        "emoji": "🔴",
-                        "color": 0xff0000,
-                        "text": "online but in focus mode",
-                        "vibe": "focused",
-                        "action": "entered with purpose"
-                    }
-                }
-                
-                details = status_details.get(after.status, status_details[discord.Status.online])
-                
-                # Dynamic titles with animation feel
-                titles = [
-                    f"✨ {after.display_name} has arrived!",
-                    f"🎉 Welcome back, {after.display_name}!",
-                    f"🌟 {after.display_name} {details['action']}!",
-                    f"🚀 {after.display_name} is here!"
-                ]
-                
-                import random
-                title = random.choice(titles)
-                
-                # Create progress bar for visual appeal
-                progress_bar = "▓▓▓▓▓▓▓▓▓▓" if after.status == discord.Status.online else "▓▓▓▓▓▓▓░░░"
-                
-                # Get current online count for context
-                online_members = self.get_online_members(after.guild)
-                online_count = len(online_members)
-                
-                embed = discord.Embed(
-                    title=title,
-                    color=details["color"],
-                    timestamp=datetime.utcnow()
-                )
-                
-                # Rich description with visual elements
-                description = f"""
-{details['emoji']} **{after.display_name}** is now {details['text']}!
-
-**Status:** {progress_bar} `{details['vibe'].upper()}`
-**Activity Level:** {'🔥 High' if online_count > 5 else '💫 Moderate' if online_count > 2 else '🌙 Quiet'}
-**Server Vibe:** {self._get_vibe_emoji(online_count / max(after.guild.member_count, 1) * 100)} {self._get_vibe_text(online_count / max(after.guild.member_count, 1) * 100)}
-
-💬 *Perfect timing to start a conversation!*
-                """
-                
-                embed.description = description.strip()
-                
-                # Add fields for extra engagement
-                embed.add_field(
-                    name="🎯 Quick Stats",
-                    value=f"**{online_count}** members online\n**{after.guild.member_count}** total members",
-                    inline=True
-                )
-                
-                embed.add_field(
-                    name="💡 Did you know?",
-                    value=self._get_fun_fact(online_count),
-                    inline=True
-                )
-                
-                # Set beautiful visuals
-                embed.set_thumbnail(url=after.display_avatar.url)
-                if after.guild.icon:
-                    embed.set_author(
-                        name=f"{after.guild.name} Community",
-                        icon_url=after.guild.icon.url
-                    )
-                
-                embed.set_footer(
-                    text=f"🔔 Real-time updates • {datetime.now().strftime('%I:%M %p')}",
-                    icon_url="https://cdn.discordapp.com/emojis/1234567890123456789.png"  # Optional: custom emoji
-                )
-                
-                await channel.send(embed=embed)
+                # Member came online - send DM to users with target role
+                logger.info(f"🟢 {after.display_name} came online!")
+                await self.send_dm_notifications(after, target_role)
                 
             elif was_online and not is_online:
                 # Member went offline - just log it, don't send notification
@@ -568,10 +528,7 @@ class OnlineMemberTracker(commands.Bot):
         guild_id = after.guild.id
         logger.info(f"Status change detected for {after.display_name} in guild {guild_id}: {before.status} -> {after.status}")
         
-        # Check if we have a notification channel set for this guild
-        if guild_id not in self.notification_channels:
-            logger.info(f"No notification channel set for guild {guild_id}")
-            return
+        # Note: No longer requiring notification channel since we use DMs
         
         # Check if we have a target role set for this guild
         if guild_id not in self.target_roles:
@@ -597,10 +554,6 @@ class OnlineMemberTracker(commands.Bot):
         logger.info(f"Processing notification for {after.display_name}...")
         
         try:
-            channel = self.get_channel(self.notification_channels[guild_id])
-            if not channel:
-                logger.error(f"Could not find notification channel {self.notification_channels[guild_id]}")
-                return
             
             # Determine if member went online or offline
             was_online = (before.status != discord.Status.offline and 
@@ -611,16 +564,9 @@ class OnlineMemberTracker(commands.Bot):
             logger.info(f"Status transition: was_online={was_online}, is_online={is_online}")
             
             if not was_online and is_online:
-                # Member came online
+                # Member came online - send DM to users with target role
                 logger.info(f"🟢 {after.display_name} came online!")
-                embed = discord.Embed(
-                    title="🟢 Someone's Here!",
-                    description=f"**{after.display_name}** just came online!",
-                    color=0x00ff00,
-                    timestamp=datetime.now()
-                )
-                embed.set_thumbnail(url=after.display_avatar.url)
-                await channel.send(embed=embed)
+                await self.send_dm_notifications(after, target_role)
                 
             elif was_online and not is_online:
                 # Member went offline - just log it, don't send notification
